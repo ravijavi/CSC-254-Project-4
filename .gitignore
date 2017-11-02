@@ -1,6 +1,12 @@
 .DS_Store
 
+*.h
 *.c
 *.o
 hello
 loop
+main
+
+*.txt
+*.css
+*.html
