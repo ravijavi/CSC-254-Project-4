@@ -1,28 +1,32 @@
 # get the name of the executable we are checking
 if (ARGV.length == 0)
-   abort("must provide a path to an executable as an argument!") 
+   abort("you must provide a path to an executable as an argument!") 
 end
 path = ARGV[0]
 
 puts "executable: " + path + "\n\n"
 # need a more precise regex that only captures main instructions, this is all just for figuring things out
 regex_obj = /^[ \t]*([0-9a-f]{6}):[ \t]*((?: ?[0-9a-f]{2})+)[ \t]*([a-z]+) *([a-zA-Z0-9%,$@\(\) <>_\+\*\#\.:]*)/
+
+# will want everything from <main> up to <libc_csu_init>
+# for now, capture every line
 objdump = `~cs254/bin/objdump -d #{path}`
-# get only the <main> section
-objdump = objdump[(objdump.index "<main>:\n")+8..-1]
-# ignore everything after the next number <something> section
-# TODO: move cutoff to <_libc_csu_init>, since header stuff will be after <main>
-objdump = objdump[0..(objdump.index /[0-9a-f]+ +<[_a-z]+>:/)-1]
+
+# remove everything before <main>
+objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
+# remove everything past <__libc_csu_init>
+objdump = objdump[0..objdump.index(/[0-9a-f]+ <__libc_csu_init>:/)-1]
+asmarray = objdump.scan(regex_obj)
+
 puts objdump
 
-
-asmarray = objdump.scan(regex_obj)
 
 # 1. asm address
 # 2. line number
 # 3. col number
 # 4. ET if end of sequence, empty otherwise
 # 5. the path of the uri if present, false otherwise
+# will probably modify this standard later
 regex_dwarf = /^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.*(ET))?(?:.*uri: "([\/a-zA-Z0-9_\-\.]+)")?/
 dwarfdump = `~cs254/bin/dwarfdump #{path}`
 
@@ -30,8 +34,33 @@ dwarfarray = dwarfdump.scan(regex_dwarf)
 puts "dwarf information:"
 puts dwarfarray
 
+
 dh = Hash.new()
-dwarfarray.each { |x| dh[x[0].to_i(16)] = x[1] }
+uri = nil
+# store the dwarfdump information in a more useful way, and add extra info to the entries
+dwarfarray.each { |x|
+    # parse address from assembly
+    addr = x[0].to_i(16)
+    # the same address can be referenced multiple times in dwarfdump
+                
+    if (x[4] != nil)
+        uri = x[4]
+    end
+    
+    # store hash table entries in buckets (arrays)
+    
+    # format:
+    # 0. address
+    # 1. line number
+    # 2. uri
+    entry = [addr, x[1].to_i(10), uri]
+    if (dh[addr] == nil)
+        dh[addr] = [entry]
+    elsif # we already have souce code for this address
+        dh[addr].push(entry)
+    end
+}
+puts dh
 
 
 def get_file_array(path)
@@ -51,11 +80,46 @@ footer = "</body></html>"
 
 body = '<table class="dump">'
 
-asmarray.each { |x|
-    puts x[0] + ", " + x[1] + ", " + x[2] + ", " + x[3] + "\t\t(" + (dh[x[0].to_i(16)] != nil ? dh[x[0].to_i(16)] : "Nil") + ")"
-}
+#asmarray.each { |x|
+#    puts x[0] + ", " + x[1] + ", " + x[2] + ", " + x[3] + "\t\t(" + (dh[x[0].to_i(16)] != nil ? dh[x[0].to_i(16)] : "Nil") + ")"
+#}
 
-puts "\n\n\n"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=begin
 # iterate over all the lines we got from the dwarfdump output
 # that way, we build the information for one file at a time
 enum = asmarray.each
@@ -148,23 +212,6 @@ side_asm = ""
 
 File.write("index.html", header + '<table class="dump">' + content + '</table>' + footer)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 code_side = ""
 asm_side = ""
 asmarray.each { |x|
@@ -184,3 +231,4 @@ body += "
 </table>"
 
 #File.write("index.html", header + body + footer)
+=end
