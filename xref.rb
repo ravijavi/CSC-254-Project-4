@@ -15,6 +15,7 @@ objdump = `~cs254/bin/objdump -d #{path}`
 # remove everything before <main>
 objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
 # remove everything past <__libc_csu_init>
+# TODO: what if there is a function in the source called _libc_csu_init?
 objdump = objdump[0..objdump.index(/[0-9a-f]+ <__libc_csu_init>:/)-1]
 asmarray = objdump.scan(regex_obj)
 
@@ -31,8 +32,19 @@ regex_dwarf = /^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.*(ET))?(?:.*uri: "
 dwarfdump = `~cs254/bin/dwarfdump #{path}`
 
 dwarfarray = dwarfdump.scan(regex_dwarf)
-puts "dwarf information:"
-puts dwarfarray
+#puts "dwarf information:"
+#puts dwarfarray
+
+# TODO: get dwarfdump sourcecode line bounds SEPARATELY
+# may need to iterate over dwarfdump output in sequential order beforehand to determine which lines match up
+
+# store information from source code in a hash table
+sources = Hash.new()
+# for each source, we need:
+# -last read line
+# -highest line number read up to now
+# use that information to add an "upperbound" value for line numbers (and a "read" value for single, already-read lines) for each dwarfdump entry
+
 
 
 dh = Hash.new()
@@ -45,15 +57,27 @@ dwarfarray.each { |x|
                 
     if (x[4] != nil)
         uri = x[4]
+        # add the source code file to the sources hash table to determine which source code lines need to be read
+        if (sources[uri] == nil)
+            sources[uri] = 0 # the highest line number read so far
+        end
     end
     
     # store hash table entries in buckets (arrays)
     
     # format:
     # 0. address
-    # 1. line number
-    # 2. uri
-    entry = [addr, x[1].to_i(10), uri]
+    # 1. line number start
+    # 2. line number end (inclusive?)
+    # 3. boolean (has this line already been read?  yes=true, no=false)
+    # 4. uri
+    entry_line = x[1].to_i(10)
+    # TODO: combine ET sections with the previous one?  we probably want only one dwarfdump entry for a given assembly instruction, not several
+    entry = 0
+    entry = [addr, (entry_line > sources[uri] ? sources[uri]+1 : entry_line), entry_line, (entry_line < sources[uri]), uri]
+    if (entry_line > sources[uri])
+        sources[uri] = entry_line
+    end
     if (dh[addr] == nil)
         dh[addr] = [entry]
     elsif # we already have souce code for this address
@@ -61,6 +85,48 @@ dwarfarray.each { |x|
     end
 }
 puts dh
+
+
+# TODO: open up source files, mark when lines are visited
+
+# global variables used over several iterations
+cur_file = '' # the source file of the last asm line successfully matched in dwarfdump
+cur_line = '' # the sc line of the last asm line successfully matched in dwarfdump
+
+html_table = '' # the contents of the <table> tag
+html_asm = '' # formatted HTML of the current cell for the assembly side
+html_source = '' # formatted c code of the current cell for the source code side
+
+
+# iterate over objdump assembly to build the webpage
+asmarray.each { |x|
+    # look up line in dwarfdump
+    correspondance = dh[x[0].to_i(16)]
+    if (correspondance != nil) # if we find a match, we probably create a new table row
+        puts x[0]
+        if (correspondance[2] != cur_file)
+        # check if the current file changed (load that file's code if we haven't already)
+        # check if we need to create a new row
+            # if we do, append the finished row and reset the html_* vars
+            # if we do, get all the source code for that row immediately
+            x = 0
+        end
+    else # append the assembly to the html_asm side
+        puts 'foo'
+    end
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def get_file_array(path)
