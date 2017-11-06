@@ -3,10 +3,13 @@
 *.h
 *.c
 *.o
+*.out
 hello
 loop
 func
 main
+
+Makefile
 
 *.txt
 *.css
