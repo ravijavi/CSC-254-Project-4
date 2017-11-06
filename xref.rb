@@ -17,7 +17,7 @@ regex_obj = /^[ \t]*([0-9a-f]{6}):[ \t]*((?: ?[0-9a-f]{2})+)[ \t]*([a-z]+) *([a-
 # 4. ET if end of sequence, empty otherwise
 # 5. the path of the uri if present, false otherwise
 # will probably modify this standard later
-regex_dwarf = /^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.*(ET))?(?:.*uri: "([\/a-zA-Z0-9_\-\.]+)")?/
+regex_dwarf = /^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.* (ET))?(?:.* uri: "([\/a-zA-Z0-9_\-\.]+)")?/
 dwarfdump = `~cs254/bin/dwarfdump #{path}`
 
 dwarfarray = dwarfdump.scan(regex_dwarf)
@@ -64,18 +64,21 @@ dwarfarray.each { |x|
     end
     
     # store hash table entries in buckets (arrays)
-    
+
     # format:
     # 0. address
     # 1. line number start
     # 2. line number end (inclusive?)
     # 3. boolean (has this line already been read?  yes=true, no=false)
     # 4. uri
+    # 5. is ET?  boolean
     entry_line = x[1].to_i(10)
     # TODO: combine ET sections with the previous one?  we probably want only one dwarfdump entry for a given assembly instruction, not several
-    if (entry_line != prev_line)
+    # in the case of ET, want to attach to prev group, then trigger stoppage of visiting lines
+    if (entry_line != prev_line || x[3] != nil)
         entry = 0
-        entry = [addr, (entry_line > sources[uri] ? sources[uri]+1 : entry_line), entry_line, (entry_line < sources[uri]), uri]
+        entry = [addr, (entry_line > sources[uri] ? sources[uri]+1 : entry_line), entry_line, (entry_line < sources[uri]), uri, (x[3] != nil)]
+
         if (entry_line > sources[uri])
             sources[uri] = entry_line
         end
@@ -85,8 +88,7 @@ dwarfarray.each { |x|
             dh[addr][2] = entry_line
         end
     else # make it a continuation of the previously parsed dd instruction
-        x = 0 # do nothing
-                
+        foo = 0 # do nothing
     end
     
     prev_line = entry_line
@@ -115,8 +117,8 @@ objdump = objdump[objdump.index(first_addr.to_s(16) + ':') .. objdump.index(last
 #objdump = objdump[0..objdump.index(/[0-9a-f]+ <__libc_csu_init>:/)-1]
 asmarray = objdump.scan(regex_obj)
 
-puts objdump
-puts asmarray
+#puts objdump
+#puts asmarray
 
 
 
@@ -136,7 +138,8 @@ def htmlify_string(s)
         return '&nbsp;'
     else
         return s.gsub('\n', '') #remove trailing newlines
-        .gsub('<', '&lt;')
+        .gsub(' ', '&nbsp;') # convert spaces
+        .gsub('<', '&lt;').gsub('>', '&gt;') # convert less than and greater than
 
     end
 end
@@ -155,6 +158,10 @@ html_source = '' # formatted c code of the current cell for the source code side
 
 first_iteration = true
 
+# if false, currently in a block of assembly with no direct correspondance to source code, so don't append lines to assembly side from now on until we find a match in dwarfdump
+parsing_useful_asm = true
+found_et = false
+
 # iterate over objdump assembly to build the webpage
 asmarray.each { |x|
     # NOTE: do not want to iterate over every line
@@ -162,24 +169,35 @@ asmarray.each { |x|
     # look up line in dwarfdump
     correspondance = dh[x[0].to_i(16)]
     if (correspondance != nil) # if we find a match, we probably create a new table row
-        # cut off the old table row
-        if (first_iteration)
-            first_iteration = false
-        else
-            html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
-            html_asm = '';
-            html_source = '';
-            first_iteration = false
-        end
-        if (correspondance[4] != cur_file)
-            cur_file = correspondance[4]
-            sources[cur_file] = get_file_array(cur_file)
-        end
-        puts correspondance
-        # get all the corresponding source code
-        sources[correspondance[4]][correspondance[1]-1..correspondance[2]-1].each_with_index do |line, index|
+        parsing_useful_asm = true # start recording asm lines if we weren't currently
+        # check if this entry is a special one marking the end of a text sequence
+        if (correspondance[5])
+            found_et = true # used to make sure we attach this line to the current block, but trigger ignore asm starting on the next line
+        else # otherwise cut off the block
+            # cut off the old table row
+            if (first_iteration)
+                first_iteration = false
+            else
+                html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
+                html_asm = '';
+                html_source = '';
+                first_iteration = false
+            end
+            if (correspondance[4] != cur_file)
+                cur_file = correspondance[4]
+                sources[cur_file] = get_file_array(cur_file)
+            end
+            # get all the corresponding source code
+            sources[correspondance[4]][correspondance[1]-1..correspondance[2]-1].each_with_index do |line, index|
             html_source += '<div class="src-line' + (correspondance[3] ? ' grey' : '') + '"><div>' + (index+correspondance[1]).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
+            end
+            
         end
+              
+        
+              
+        # check if we reached the end of a block and should stop including assembly instructions
+        
         
         #if (correspondance[2] != cur_file)
             
@@ -191,7 +209,13 @@ asmarray.each { |x|
         #end
     end
     # add the current line of assembly to the row
-    html_asm += '<div class="asm-line"><div>' + x[0] + '</div><div>' + x[1] + '</div><div>' + x[2] + '</div><div>' + (x[3] == "" ? "&nbsp;" : x[3]) + '</div></div>'
+    if (parsing_useful_asm)
+        html_asm += '<div class="asm-line"><div>' + x[0] + '</div><div>' + x[1] + '</div><div>' + x[2] + '</div><div>' + (x[3] == "" ? "&nbsp;" : x[3]) + '</div></div>'
+        if (found_et)
+            parsing_useful_asm = false
+            found_et = false
+        end
+    end
 }
 
 # close off current row
