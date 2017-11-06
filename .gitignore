@@ -5,6 +5,7 @@
 *.o
 hello
 loop
+func
 main
 
 *.txt
