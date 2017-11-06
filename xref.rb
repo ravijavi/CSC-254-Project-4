@@ -8,18 +8,7 @@ puts "executable: " + path + "\n\n"
 # need a more precise regex that only captures main instructions, this is all just for figuring things out
 regex_obj = /^[ \t]*([0-9a-f]{6}):[ \t]*((?: ?[0-9a-f]{2})+)[ \t]*([a-z]+) *([a-zA-Z0-9%,$@\(\) <>_\+\*\#\.:]*)/
 
-# will want everything from <main> up to <libc_csu_init>
-# for now, capture every line
-objdump = `~cs254/bin/objdump -d #{path}`
 
-# remove everything before <main>
-objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
-# remove everything past <__libc_csu_init>
-# TODO: what if there is a function in the source called _libc_csu_init?
-objdump = objdump[0..objdump.index(/[0-9a-f]+ <__libc_csu_init>:/)-1]
-asmarray = objdump.scan(regex_obj)
-
-puts objdump
 
 
 # 1. asm address
@@ -46,6 +35,9 @@ sources = Hash.new()
 # use that information to add an "upperbound" value for line numbers (and a "read" value for single, already-read lines) for each dwarfdump entry
 
 
+# use dwarfdump to find the highest and lowest addresses for instructions that have corresponding source code
+first_addr = Float::INFINITY
+last_addr = 0
 
 dh = Hash.new()
 uri = nil
@@ -55,8 +47,14 @@ prev_addr = 0 # same purpose as prev_line
 dwarfarray.each { |x|
     # parse address from assembly
     addr = x[0].to_i(16)
+    
+    if (addr < first_addr)
+        first_addr = addr
+    end
+    if (addr > last_addr)
+        last_addr = addr
+    end
     # the same address can be referenced multiple times in dwarfdump
-                
     if (x[4] != nil)
         uri = x[4]
         # add the source code file to the sources hash table to determine which source code lines need to be read
@@ -96,6 +94,29 @@ dwarfarray.each { |x|
 }
 puts dh
 
+printf("first address: 0x%x\n", first_addr)
+printf("last address:  0x%x\n", last_addr)
+
+
+
+
+
+
+# figure out bounds we need for objdump based on dwarfdump output
+# start by capturing every line
+objdump = `~cs254/bin/objdump -d #{path}`
+
+objdump = objdump[objdump.index(first_addr.to_s(16) + ':') .. objdump.index(last_addr.to_s(16) + ':')]
+
+# remove everything before <main>
+#objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
+# remove everything past <__libc_csu_init>
+# TODO: what if there is a function in the source called _libc_csu_init?
+#objdump = objdump[0..objdump.index(/[0-9a-f]+ <__libc_csu_init>:/)-1]
+asmarray = objdump.scan(regex_obj)
+
+puts objdump
+puts asmarray
 
 
 
@@ -157,7 +178,7 @@ asmarray.each { |x|
         puts correspondance
         # get all the corresponding source code
         sources[correspondance[4]][correspondance[1]-1..correspondance[2]-1].each_with_index do |line, index|
-            html_source += '<div class="src-line"><div>' + (index+correspondance[1]).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
+            html_source += '<div class="src-line' + (correspondance[3] ? ' grey' : '') + '"><div>' + (index+correspondance[1]).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
         end
         
         #if (correspondance[2] != cur_file)
