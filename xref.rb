@@ -36,8 +36,8 @@ sources = Hash.new()
 
 
 # use dwarfdump to find the highest and lowest addresses for instructions that have corresponding source code
-first_addr = Float::INFINITY
-last_addr = 0
+$first_addr = Float::INFINITY
+$last_addr = 0
 
 dh = Hash.new()
 uri = nil
@@ -48,11 +48,11 @@ dwarfarray.each { |x|
     # parse address from assembly
     addr = x[0].to_i(16)
     
-    if (addr < first_addr)
-        first_addr = addr
+    if (addr < $first_addr)
+        $first_addr = addr
     end
-    if (addr > last_addr)
-        last_addr = addr
+    if (addr > $last_addr)
+        $last_addr = addr
     end
     # the same address can be referenced multiple times in dwarfdump
     if (x[4] != nil)
@@ -84,8 +84,8 @@ dwarfarray.each { |x|
         end
         if (dh[addr] == nil)
             dh[addr] = entry
-        elsif # we already have souce code for this address
-            puts "hello"
+        else # we already have souce code for this address
+            #printf("duplicate line 0x%x \t%d to %d\n", addr, dh[addr][1], dh[addr][2])
             # TODO: better way of handling edge case for first line?
             if (dh[addr][1] == 1)
                 dh[addr][1] = dh[addr][2]
@@ -102,8 +102,8 @@ dwarfarray.each { |x|
 }
 puts dh
 
-printf("first address: 0x%x\n", first_addr)
-printf("last address:  0x%x\n", last_addr)
+printf("first address: 0x%x\n", $first_addr)
+printf("last address:  0x%x\n", $last_addr)
 
 
 
@@ -114,7 +114,7 @@ printf("last address:  0x%x\n", last_addr)
 # start by capturing every line
 objdump = `~cs254/bin/objdump -d #{path}`
 
-objdump = objdump[objdump.index(first_addr.to_s(16) + ':') .. objdump.index(last_addr.to_s(16) + ':')]
+objdump = objdump[objdump.index($first_addr.to_s(16) + ':') .. objdump.index($last_addr.to_s(16) + ':')]
 
 # remove everything before <main>
 #objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
@@ -147,6 +147,21 @@ def htmlify_string(s)
         .gsub(' ', '&nbsp;') # convert spaces
         .gsub('<', '&lt;').gsub('>', '&gt;') # convert less than and greater than
 
+    end
+end
+
+def add_jumps(s, instr)
+    if (s == '')
+        return '&nbsp;'
+    else
+        if (instr == 'jmp' || instr == 'je' || instr == 'callq')
+            # check if the address being jumped to is in a valid range
+            addr = s.scan(/^([0-9a-f]+)/)[0][0].to_i(16)
+            if (addr >= $first_addr && addr <= $last_addr)
+                return s.gsub(/^([0-9a-f]+)/, '<a onclick="document.getElementById(\'_\1\').style.backgroundColor = \'red\';" href="#_\1">\1</a>') # note that \1 in         double quotes needs to be escaped, like \\1
+            end
+        end
+        return s
     end
 end
 
@@ -216,7 +231,7 @@ asmarray.each { |x|
     end
     # add the current line of assembly to the row
     if (parsing_useful_asm)
-        html_asm += '<div class="asm-line"><div>' + x[0] + '</div><div>' + x[1] + '</div><div>' + x[2] + '</div><div>' + (x[3] == "" ? "&nbsp;" : x[3]) + '</div></div>'
+        html_asm += '<div id="_' + x[0] + '"class="asm-line"><div>' + x[0] + '</div><div>' + x[1] + '</div><div>' + x[2] + '</div><div>' + add_jumps(x[3], x[2]) + '</div></div>'
         if (found_et)
             parsing_useful_asm = false
             found_et = false
