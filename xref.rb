@@ -85,7 +85,13 @@ dwarfarray.each { |x|
         if (dh[addr] == nil)
             dh[addr] = entry
         elsif # we already have souce code for this address
+            puts "hello"
+            # TODO: better way of handling edge case for first line?
+            if (dh[addr][1] == 1)
+                dh[addr][1] = dh[addr][2]
+            end
             dh[addr][2] = entry_line
+            
         end
     else # make it a continuation of the previously parsed dd instruction
         foo = 0 # do nothing
