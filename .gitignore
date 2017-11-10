@@ -1,6 +1,8 @@
 .DS_Store
 
+*.c
 !examples/*.c
+*.h
 !examples/*.h
 *.o
 *.out
@@ -10,6 +12,7 @@ func
 main
 
 Makefile
+!examples/Makefile
 
 *.txt
 *.css
