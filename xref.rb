@@ -29,6 +29,11 @@ dwarfarray = dwarfdump.scan(regex_dwarf)
 
 # store information from source code in a hash table
 sources = Hash.new()
+
+
+# store directly corresponding lines from dwarfdump for each source file
+dwarf_lines = Hash.new()
+
 # for each source, we need:
 # -last read line
 # -highest line number read up to now
@@ -57,42 +62,55 @@ dwarfarray.each { |x|
     # the same address can be referenced multiple times in dwarfdump
     if (x[4] != nil)
         uri = x[4]
-        # add the source code file to the sources hash table to determine which source code lines need to be read
-        if (sources[uri] == nil)
-            sources[uri] = 0 # the highest line number read so far
+        # add the source code file to the dwarf_lines hash table to determine which source code lines need to be read
+        if (dwarf_lines[uri] == nil) # initialize for a given source file if needed
+            dwarf_lines[uri] = [] # store list of source lines corresponding to that file
         end
     end
-    
-    # store hash table entries in buckets (arrays)
-
     # format:
     # 0. address
-    # 1. line number start
-    # 2. line number end (inclusive?)
-    # 3. boolean (has this line already been read?  yes=true, no=false)
-    # 4. uri
-    # 5. is ET?  boolean
+    # 1. line number end
+    # 2. boolean (has this line already been read?  yes=true, no=false)
+    # 3. uri
+    # 4. is ET?  boolean
     entry_line = x[1].to_i(10)
     # TODO: combine ET sections with the previous one?  we probably want only one dwarfdump entry for a given assembly instruction, not several
     # in the case of ET, want to attach to prev group, then trigger stoppage of visiting lines
-    if (entry_line != prev_line || x[3] != nil)
-        entry = 0
-        entry = [addr, (entry_line > sources[uri] ? sources[uri]+1 : entry_line), entry_line, (entry_line < sources[uri]), uri, (x[3] != nil)]
-
-        if (entry_line > sources[uri])
-            sources[uri] = entry_line
+    if (true) #if (entry_line != prev_line || x[3] != nil)
+        
+        # insert the line into the source array if not yet there, preserving order
+        # don't insert duplicates though
+        found = false
+        if (dwarf_lines[uri].length == 0)
+            dwarf_lines[uri].push(entry_line)
+        else
+            i = dwarf_lines[uri].bsearch{|x| x == entry_line}
+            if (i != nil)
+                found = true
+            else
+                j = 0
+                while (j < dwarf_lines[uri].length && dwarf_lines[uri][j] < entry_line)
+                    j += 1
+                end
+                dwarf_lines[uri].insert(j, entry_line)
+            end
         end
+
+        
+        
+                
+        # store the information about the dd line in the hash table
+        # TODO: check if line is already present
+        entry = [addr, entry_line, found, uri, (x[3] != nil)]
+        
         if (dh[addr] == nil)
             dh[addr] = entry
         else # we already have souce code for this address
-            #printf("duplicate line 0x%x \t%d to %d\n", addr, dh[addr][1], dh[addr][2])
-            # TODO: better way of handling edge case for first line?
-            if (dh[addr][1] == 1)
-                dh[addr][1] = dh[addr][2]
-            end
+             # just update the ending line for that entry
             dh[addr][2] = entry_line
             
         end
+        
     else # make it a continuation of the previously parsed dd instruction
         foo = 0 # do nothing
     end
@@ -101,12 +119,10 @@ dwarfarray.each { |x|
     prev_addr = addr
 }
 puts dh
+puts dwarf_lines
 
 printf("first address: 0x%x\n", $first_addr)
 printf("last address:  0x%x\n", $last_addr)
-
-
-
 
 
 
@@ -185,14 +201,16 @@ found_et = false
 
 # iterate over objdump assembly to build the webpage
 asmarray.each { |x|
+    puts x.join(" ")
     # NOTE: do not want to iterate over every line
     # helper frames should be ignored
     # look up line in dwarfdump
     correspondance = dh[x[0].to_i(16)]
     if (correspondance != nil) # if we find a match, we probably create a new table row
+        puts correspondance.join(" ")
         parsing_useful_asm = true # start recording asm lines if we weren't currently
         # check if this entry is a special one marking the end of a text sequence
-        if (correspondance[5])
+        if (correspondance[4])
             found_et = true # used to make sure we attach this line to the current block, but trigger ignore asm starting on the next line
         else # otherwise cut off the block
             # cut off the old table row
@@ -204,15 +222,33 @@ asmarray.each { |x|
                 html_source = '';
                 first_iteration = false
             end
-            if (correspondance[4] != cur_file)
-                cur_file = correspondance[4]
+            if (correspondance[3] != cur_file)
+                cur_file = correspondance[3]
                 sources[cur_file] = get_file_array(cur_file)
             end
             # get all the corresponding source code
-            sources[correspondance[4]][correspondance[1]-1..correspondance[2]-1].each_with_index do |line, index|
-            html_source += '<div class="src-line' + (correspondance[3] ? ' grey' : '') + '"><div>' + (index+correspondance[1]).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
+            # we know the ending line, but need to calculate the starting line
+            i = 0
+            while (i < dwarf_lines[uri].length && dwarf_lines[uri][i] < correspondance[1])
+                i += 1
             end
-            
+            if (i == dwarf_lines[uri].length)
+                puts "error: could not find line in dwarfdump"
+                puts correspondance.join(" ")
+                puts dwarf_lines[cur_file].join(" ")
+                puts ""
+            else
+                low = (i == 0 ? 1 : dwarf_lines[cur_file][i-1]+1)
+                high = dwarf_lines[cur_file][i]
+                if (correspondance[2])
+                    low = high
+                end
+                printf("i: %d\n", i)
+                printf("low: %d, high: %d\n", low, high)
+                sources[cur_file][low-1..high-1].each_with_index do |line, index|
+                    html_source += '<div class="src-line' + (correspondance[2] ? ' grey' : '') + '"><div>' + (index+low).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
+                end
+            end
         end
               
         
