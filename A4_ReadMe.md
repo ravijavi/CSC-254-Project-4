@@ -12,7 +12,7 @@ For Assignment A4, I worked with Jeremy Spiro. In this project, we implemented a
 IMPLEMENTATION:
 Our first step was to successfully feed files into dwarfdump and output a corresponding list of instructions and registers and memories used in the execution of the program. We created the following regex for dwarfdump:
 
-/^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.* (ET))?(?:.* uri: "([\/a-zA-Z0-9_\-\.]+)")?/
+```/^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.* (ET))?(?:.* uri: "([\/a-zA-Z0-9_\-\.]+)")?/```
 
 This line successfully provided us with all the important information we would need to glean from dwarfdump to create our HTML output.
 
@@ -24,13 +24,21 @@ For the construction of the webpage, we iterate over objump assembly, but ensure
 
 HOW TO RUN:
 
+Run with ```ruby xref.rb <path_to_executable```
+Writes an 'index.html' file to the directory with the correspondance shown in a table
+
 --------------------------------------------------------------------------------------------------------------------------
 EXAMPLE OUTPUT:
 
+Our three main files that we tested are "main", "hello", and "loop"
+
 For "main":
+```gcc -g3 -O3 -o main main.c header.c```
 
 For "hello":
+```gcc -g3 -O3 -o hello hello.c header.c```
 
 For "loop":
+```gcc -g3 -O3 -o loop loop.c header.c```
 
 
