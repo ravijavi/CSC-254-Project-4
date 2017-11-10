@@ -1,6 +1,6 @@
 Jeremy Spiro(jspiro2@u.rochester.edu), Ravi Jain (rjain8@u.rochester.edu), CSC 254, MW 10:25-11:40, Prof. Michael Scott
 
-For Assignment A4, I worked with Jeremy Spiro. In this project, we implemented a cross indexer in Ruby that parsed a given set of assembly instructions from a C file and outputted an HTML file; the resulting HTML file contained a side-by-side comparison between the original source code and the corresponding assembly. Ultimately, we had to implement an xref program that could:
+In this project, we implemented a cross indexer in Ruby that parsed a given set of assembly instructions from a C file and outputted an HTML file; the resulting HTML file contained a side-by-side comparison between the original source code and the corresponding assembly. Ultimately, we had to implement an xref program that could:
 
 1) run objdump -d myprogram and examine the output to obtain the assembly language version of the program
 2) run dwarfdump and examine the output to learn the names of the source files and the code rangers in the program corresponding to each line in those files
@@ -13,6 +13,7 @@ IMPLEMENTATION:
 Our first step was to successfully feed files into dwarfdump and output a corresponding list of instructions and registers and memories used in the execution of the program. We created the following regex for dwarfdump:
 
 ```/^0x([0-9a-f]+) *\[ *([0-9]+), *([0-9]+) *\](?:.* (ET))?(?:.* uri: "([\/a-zA-Z0-9_\-\.]+)")?/```
+This gives us an array of .debug_line information, in the form of [<address>, <linenum>, <colnum>, <uri>, <ET?>]
 
 This line successfully provided us with all the important information we would need to glean from dwarfdump to create our HTML output.
 
