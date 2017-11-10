@@ -76,7 +76,12 @@ dwarfarray.each { |x|
     entry_line = x[1].to_i(10)
     # TODO: combine ET sections with the previous one?  we probably want only one dwarfdump entry for a given assembly instruction, not several
     # in the case of ET, want to attach to prev group, then trigger stoppage of visiting lines
-    if (prev_addr != addr || (prev_addr == addr && dh[addr][4] && x[5] == nil)) #if (entry_line != prev_line || x[3] != nil)
+    if (prev_addr != addr || (prev_addr == addr && dh[addr][4] && x[5] == nil))
+                
+        if (prev_addr == addr && dh[addr][4] && x[5] == nil)
+            printf("0x%x\n", addr)
+            dh[addr] = nil
+        end
         
         # insert the line into the source array if not yet there, preserving order
         # don't insert duplicates though
