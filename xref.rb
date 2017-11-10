@@ -76,7 +76,7 @@ dwarfarray.each { |x|
     entry_line = x[1].to_i(10)
     # TODO: combine ET sections with the previous one?  we probably want only one dwarfdump entry for a given assembly instruction, not several
     # in the case of ET, want to attach to prev group, then trigger stoppage of visiting lines
-    if (true) #if (entry_line != prev_line || x[3] != nil)
+    if (prev_addr != addr || (prev_addr == addr && dh[addr][4] && x[5] == nil)) #if (entry_line != prev_line || x[3] != nil)
         
         # insert the line into the source array if not yet there, preserving order
         # don't insert duplicates though
@@ -105,14 +105,20 @@ dwarfarray.each { |x|
         
         if (dh[addr] == nil)
             dh[addr] = entry
-        else # we already have souce code for this address
+        else # we already have source code for this address
              # just update the ending line for that entry
-            dh[addr][2] = entry_line
+            dh[addr][1] = entry_line
             
         end
         
     else # make it a continuation of the previously parsed dd instruction
-        foo = 0 # do nothing
+        dwarf_lines[uri] = dwarf_lines[uri] - [prev_line]
+        j = 0
+        while (j < dwarf_lines[uri].length && dwarf_lines[uri][j] < entry_line)
+            j += 1
+        end
+        dwarf_lines[uri].insert(j, entry_line)
+        
     end
     
     prev_line = entry_line
@@ -130,7 +136,11 @@ printf("last address:  0x%x\n", $last_addr)
 # start by capturing every line
 objdump = `~cs254/bin/objdump -d #{path}`
 
-objdump = objdump[objdump.index($first_addr.to_s(16) + ':') .. objdump.index($last_addr.to_s(16) + ':')]
+# make sure we capture entirety of last asm line
+p = objdump.index($last_addr.to_s(16) + ':')
+cutoff = objdump[p..-1].index("\n") + p
+objdump = objdump[objdump.index($first_addr.to_s(16) + ':') .. cutoff]
+
 
 # remove everything before <main>
 #objdump = objdump[objdump.index(/[0-9a-f]+ <main>:/)..-1]
@@ -208,6 +218,7 @@ asmarray.each { |x|
     correspondance = dh[x[0].to_i(16)]
     if (correspondance != nil) # if we find a match, we probably create a new table row
         puts correspondance.join(" ")
+        uri = correspondance[3]
         parsing_useful_asm = true # start recording asm lines if we weren't currently
         # check if this entry is a special one marking the end of a text sequence
         if (correspondance[4])
@@ -229,6 +240,8 @@ asmarray.each { |x|
             # get all the corresponding source code
             # we know the ending line, but need to calculate the starting line
             i = 0
+            printf("line num: %d\n", correspondance[1])
+            puts uri
             while (i < dwarf_lines[uri].length && dwarf_lines[uri][i] < correspondance[1])
                 i += 1
             end
@@ -236,13 +249,14 @@ asmarray.each { |x|
                 puts "error: could not find line in dwarfdump"
                 puts correspondance.join(" ")
                 puts dwarf_lines[cur_file].join(" ")
+                puts "cur_file: " + cur_file
                 puts ""
             else
                 low = (i == 0 ? 1 : dwarf_lines[cur_file][i-1]+1)
                 high = dwarf_lines[cur_file][i]
-                if (correspondance[2])
-                    low = high
-                end
+                #if (correspondance[2]) THIS WAS REMOVED FROM REQUIREMENTS
+                #    low = high
+                #end
                 printf("i: %d\n", i)
                 printf("low: %d, high: %d\n", low, high)
                 sources[cur_file][low-1..high-1].each_with_index do |line, index|
@@ -283,10 +297,6 @@ header = File.open("header.txt").read
 footer = '</body></html>'
 
 File.write("index.html", header + '<table class="dump">' + html_table + '</table>' + footer)
-
-
-
-
 
 
 
