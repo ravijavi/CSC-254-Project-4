@@ -301,7 +301,8 @@ html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
 header = File.open("header.txt").read
 footer = '</body></html>'
 
-File.write("index.html", header + '<table class="dump">' + html_table + '</table>' + footer)
+Dir.mkdir("HTML") unless File.exists?("HTML")
+File.write("HTML/index.html", header + '<table class="dump">' + html_table + '</table>' + footer)
 
 
 
