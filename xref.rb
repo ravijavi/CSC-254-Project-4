@@ -187,9 +187,12 @@ def add_jumps(s, instr)
     else
         if (instr == 'jmp' || instr == 'je' || instr == 'callq')
             # check if the address being jumped to is in a valid range
-            addr = s.scan(/^([0-9a-f]+)/)[0][0].to_i(16)
-            if (addr >= $first_addr && addr <= $last_addr)
-                return s.gsub(/^([0-9a-f]+)/, '<a onclick="fade(\'_\1\')" href="#_\1">\1</a>') # note that \1 in         double quotes needs to be escaped, like \\1
+            val = s.scan(/^([0-9a-f]+)/);
+            if (s.length > 0)
+                addr = val[0][0].to_i(16)
+                if (addr >= $first_addr && addr <= $last_addr)
+                    return s.gsub(/^([0-9a-f]+)/, '<a onclick="fade(\'_\1\')" href="#_\1">\1</a>') # note that \1 in         double quotes needs to be escaped, like \\1
+                end
             end
         end
         return s
