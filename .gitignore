@@ -1,7 +1,7 @@
 .DS_Store
 
-*.h
-*.c
+!examples/*.c
+!examples/*.h
 *.o
 *.out
 hello
