@@ -1,18 +1,15 @@
 .DS_Store
 
 *.c
-!examples/*.c
 *.h
-!examples/*.h
+Makefile
+examples/*
 *.o
 *.out
 hello
 loop
 func
 main
-
-Makefile
-!examples/Makefile
 
 *.txt
 *.css
