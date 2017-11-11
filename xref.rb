@@ -3,6 +3,9 @@ if (ARGV.length == 0)
    abort("you must provide a path to an executable as an argument!") 
 end
 path = ARGV[0]
+if (!FileTest.exist? path)
+   abort("could not find file") 
+end
 $multifile = false
 if (ARGV.length >= 2)
     if (ARGV[1] == "multi")
@@ -113,7 +116,7 @@ dwarfarray.each { |x|
     if (prev_addr != addr || (prev_addr == addr && dh[addr][4] && x[5] == nil))
                 
         if (prev_addr == addr && dh[addr][4] && x[5] == nil)
-            printf("0x%x\n", addr)
+            #printf("0x%x\n", addr)
             dh[addr] = nil
         end
         
@@ -168,7 +171,6 @@ dwarfarray.each { |x|
 
 printf("first address: 0x%x\n", $first_addr)
 printf("last address:  0x%x\n", $last_addr)
-puts $dwarfmatch
 
 
 # figure out bounds we need for objdump based on dwarfdump output
@@ -319,11 +321,19 @@ tr {
         function fade(id) {
             // remove and add class to re-trigger animation
             var target = document.getElementById(id)
-            target.classList.remove("fade-animation");
-            void target.offsetWidth; // needed to restart animation, thanks Chris Coyier
-            target.classList.add("fade-animation");
-
+            if (target !== undefined) { // doesnt matter much since this being undefined means the page is changing
+                target.classList.remove("fade-animation");
+                void target.offsetWidth; // needed to restart animation, thanks Chris Coyier
+                target.classList.add("fade-animation");
+            }
         }
+        // check if jumping to a line from outside a file so it can be faded
+        document.addEventListener("DOMContentLoaded", function() {
+            var i = window.location.href.lastIndexOf(".html#")
+            if (i !== -1) {
+                fade(window.location.href.substr(i+6))
+            }
+        }, false);
     </script>
 </head>
 
@@ -376,10 +386,11 @@ first_iteration = true
 parsing_useful_asm = true
 found_et = false
 
-puts filehash
-
-
-
+# delete prior HTML directory
+if (File.directory? "HTML")
+    `rm -r HTML`
+end
+    
 # iterate over objdump assembly to build the webpage
 asmarray.each { |x|
     #puts x.join(" ")
