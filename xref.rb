@@ -46,18 +46,46 @@ dwarf_lines = Hash.new()
 # use that information to add an "upperbound" value for line numbers (and a "read" value for single, already-read lines) for each dwarfdump entry
 
 
+
+
+# get list of files we have to write to, and match them with the first asm address in that file
+regex_file = /<pc>.+?0x([0-9a-f]+).+?uri: "([a-zA-Z0-9\-_\.\/\<\>\(\)\{\}\[\]]+)"/m
+filearray = dwarfdump.scan(regex_file)
+filehash = Hash.new()
+filearray.each{ |x|
+    filehash[x[0].to_i(16)] = x[1]
+}
+
+$dwarfmatch = Hash.new() # used for multifile for making sure cross-file links work, very expensive overhead with this implementation unfortunately, but not enough time to implement a better solution (like using a set of paired values)
+
+
+
+
 # use dwarfdump to find the highest and lowest addresses for instructions that have corresponding source code
 $first_addr = Float::INFINITY
 $last_addr = 0
 
 dh = Hash.new()
 uri = nil
+tmp_file = nil
 prev_line = -1 # last source code line looked at, needed to merge some instructions with their sequential lines
 prev_addr = 0 # same purpose as prev_line
 # store the dwarfdump information in a more useful way, and add extra info to the entries
 dwarfarray.each { |x|
     # parse address from assembly
     addr = x[0].to_i(16)
+    
+    # figure our correspondance between address and source file for jumps            
+    if (filehash[addr] != nil)
+        #tmp_file = filehash[addr]
+        # get filename from last entry
+        tmp_file = filehash[addr].gsub("/", "_")
+        f = filehash[addr].split("/")[-1].split("\.")
+        tmp_file += f[0] + "_" + f[1] + ".html"
+    end
+    if ($multifile)
+        $dwarfmatch[addr] = tmp_file
+    end
     
     if (addr < $first_addr)
         $first_addr = addr
@@ -140,7 +168,7 @@ dwarfarray.each { |x|
 
 printf("first address: 0x%x\n", $first_addr)
 printf("last address:  0x%x\n", $last_addr)
-
+puts $dwarfmatch
 
 
 # figure out bounds we need for objdump based on dwarfdump output
@@ -163,13 +191,9 @@ asmarray = objdump.scan(regex_obj)
 #puts objdump
 #puts asmarray
 
-# get list of files we have to write to, and match them with the first asm address in that file
-regex_file = /<pc>.+?0x([0-9a-f]+).+?uri: "([a-zA-Z0-9\-_\.\/\<\>\(\)\{\}\[\]]+)"/m
-filearray = dwarfdump.scan(regex_file)
-filehash = Hash.new()
-filearray.each{ |x|
-    filehash[x[0].to_i(16)] = x[1]
-}
+
+
+
 
 
 def get_file_array(path)
@@ -201,10 +225,16 @@ def add_jumps(s, instr)
         if (instr == 'jmp' || instr == 'je' || instr == 'callq')
             # check if the address being jumped to is in a valid range
             val = s.scan(/^([0-9a-f]+)/);
-            if (s.length > 0)
+            if (val.length > 0)
                 addr = val[0][0].to_i(16)
                 if (addr >= $first_addr && addr <= $last_addr)
-                    return s.gsub(/^([0-9a-f]+)/, '<a onclick="fade(\'_\1\')" href="#_\1">\1</a>') # note that \1 in         double quotes needs to be escaped, like \\1
+                    url = ''
+                    if ($multifile)
+                        if ($dwarfmatch[addr] != nil)
+                            url = $dwarfmatch[addr]
+                        end
+                    end
+                    return s.gsub(/^([0-9a-f]+)/, '<a onclick="fade(\'_\1\')" href="' + url + '#_\1">\1</a>') # note that \1 in         double quotes needs to be escaped, like \\1
                 end
             end
         end
@@ -213,7 +243,91 @@ def add_jumps(s, instr)
 end
 
 # strings used for writing to files later
-$header = File.open("header.txt").read
+$header = '<!doctype html>
+<html>
+<head>
+    <title>Example Domain</title>
+    <style type="text/css">
+    
+body {
+    font-size: 12px
+}
+
+.dump {
+  font-family: Courier;
+}
+table, th, td {
+    /*border: 1px solid black;*/
+    border-collapse: collapse;
+}
+tr {
+    border-bottom: 2px solid black;
+}
+.dump td {
+  padding: 15px 8px;
+}
+.dump td {
+  vertical-align: bottom;
+}
+.src-line, .asm-line {
+    padding: 5px 0
+}
+
+.src-line div, .asm-line div {
+  display: inline-block;
+}
+
+.src-line div:first-child {
+  width: 50px;
+}
+
+.asm-line div:first-child {
+  width: 90px;
+}
+.asm-line div:nth-child(2) {
+  width: 220px;
+  display: none;
+}
+.asm-line div:nth-child(3) {
+  width: 60px;
+}
+.asm-line div:nth-child(4) {
+  width: 200px;
+}
+
+.grey {
+    color: grey;
+}
+
+
+@keyframes fade {        
+  from {
+    background-color : #1abc9c;
+  }
+  to {
+    background-color: none;
+  }      
+}
+
+.fade-animation {
+  animation: fade 1.25s ease;
+}
+
+    
+    </style>
+    <script type="text/javascript">
+        function fade(id) {
+            // remove and add class to re-trigger animation
+            var target = document.getElementById(id)
+            target.classList.remove("fade-animation");
+            void target.offsetWidth; // needed to restart animation, thanks Chris Coyier
+            target.classList.add("fade-animation");
+
+        }
+    </script>
+</head>
+
+<body>'
 $footer = '</body></html>'
 
 # store filepath info for building index.html for multifile mode
@@ -232,20 +346,17 @@ def write_html_file(filepath, html_table, html_asm, html_source)
     
     # get correct path if saving to multiple files
     if ($multifile)
-        puts filepath.split("/")[1..-2].join(" ")
-        filepath.split("/")[1..-2].each{ |folder|
-            puts folder
-            tmp_path = tmp_path + "/" + folder
-            Dir.mkdir(tmp_path) unless File.exists?(tmp_path)
-        }
+        name = filepath.gsub("/", "_")
+
         # get filename from last entry
         f = filepath.split("/")[-1].split("\.")
-        name = f[0] + "_" + f[1] + ".html"
-        pretable = '<h1>' + f[0] + "." + f[1] + '</h1>'
+        name += f[0] + "_" + f[1] + ".html"
+        pretable = '<h1>' + f[0] + "." + f[1] + '</h1><br><a href="index.html">list of files</a>'
+        $filepaths.push([name, f[0] + "." + f[1]]) # add path info for building index.html later
     end
     # write file
     File.write(tmp_path + "/" + name, $header + pretable + '<table class="dump">' + html_table + '</table>' + $footer)
-    $filepaths.push([tmp_path[5..-1] + "/" + name, name]) # add path info for building index.html later
+    
 end
 
 
@@ -279,7 +390,6 @@ asmarray.each { |x|
     if (filehash[x[0].to_i(16)] != nil)
         if (target != nil && $multifile)
             # write current output to file
-            puts "NEW FILE"
             write_html_file(target, html_table, html_asm, html_source)
             html_table= '';
             html_asm = '';
@@ -371,9 +481,10 @@ write_html_file(target, html_table, html_asm, html_source)
 
 # create index file if needed
 if ($multifile)
-    content = '<html><body><ul>'
-    $filepaths.each { |x| 
-        content += '<li><a href="' + x[0] + '">' + x[1][0..-6] + '</a></li>'
+    content = '<html><body><h1>File list for ' + path + '</h1><ul>'
+    $filepaths.each { |x|
+        puts x[0]
+        content += '<li><a href="' + x[0] + '">' + x[1] + '</a></li>'
     }
     content += '</ul></body></html>'
     File.write("HTML/index.html", content)
