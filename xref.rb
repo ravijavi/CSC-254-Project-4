@@ -129,8 +129,8 @@ dwarfarray.each { |x|
     prev_line = entry_line
     prev_addr = addr
 }
-puts dh
-puts dwarf_lines
+#puts dh
+#puts dwarf_lines
 
 printf("first address: 0x%x\n", $first_addr)
 printf("last address:  0x%x\n", $last_addr)
@@ -157,6 +157,13 @@ asmarray = objdump.scan(regex_obj)
 #puts objdump
 #puts asmarray
 
+# get list of files we have to write to, and match them with the first asm address in that file
+regex_file = /<pc>.+?0x([0-9a-f]+).+?uri: "([a-zA-Z0-9\-_\.\/\<\>\(\)\{\}\[\]]+)"/m
+filearray = dwarfdump.scan(regex_file)
+filehash = Hash.new()
+filearray.each{ |x|
+    filehash[x[0].to_i(16)] = x[1]
+}
 
 
 def get_file_array(path)
@@ -199,11 +206,38 @@ def add_jumps(s, instr)
     end
 end
 
+# strings used for writing to files later
+$header = File.open("header.txt").read
+$footer = '</body></html>'
+
+def write_html_file(filepath, html_table, html_asm, html_source)
+    puts "path: " + filepath
+    puts "asm: " + html_asm
+    # close off current row
+    html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
+    html_asm = ''
+    html_source = ''
+    # save to directory, make sure folders exist
+    tmp_path = "HTML"
+    Dir.mkdir("HTML") unless File.exists?("HTML")
+    puts filepath.split("/")[1..-2].join(" ")
+    filepath.split("/")[1..-2].each{ |folder|
+        puts folder
+        tmp_path = tmp_path + "/" + folder
+        Dir.mkdir(tmp_path) unless File.exists?(tmp_path)
+    }
+    # get filename from last entry
+    f = filepath.split("/")[-1].split("\.")
+    name = f[0] + "_" + f[1] + ".html"
+    # write file
+    puts 
+    File.write(tmp_path + "/" + name, $header + '<h1>' + f[0] + "." + f[1] + '</h1>' + '<table class="dump">' + html_table + '</table>' + $footer)
+end
 
 
-# TODO: open up source files, mark when lines are visited
 
 # global variables used over several iterations
+target = nil # file of the source actually being written to
 cur_file = '' # the source file of the last asm line successfully matched in dwarfdump
 cur_line = '' # the sc line of the last asm line successfully matched in dwarfdump
 
@@ -217,15 +251,34 @@ first_iteration = true
 parsing_useful_asm = true
 found_et = false
 
+puts filehash
+
+
 # iterate over objdump assembly to build the webpage
 asmarray.each { |x|
-    puts x.join(" ")
+    #puts x.join(" ")
     # NOTE: do not want to iterate over every line
     # helper frames should be ignored
+    
+    # look up file being written to
+    if (filehash[x[0].to_i(16)] != nil)
+        if (target != nil)
+            # write current output to file
+            puts "NEW FILE"
+            write_html_file(target, html_table, html_asm, html_source)
+            html_table= '';
+            html_asm = '';
+            html_source = '';
+            
+        end
+        # set new current file
+        target = filehash[x[0].to_i(16)]
+    end
+              
     # look up line in dwarfdump
     correspondance = dh[x[0].to_i(16)]
     if (correspondance != nil) # if we find a match, we probably create a new table row
-        puts correspondance.join(" ")
+        #puts correspondance.join(" ")
         uri = correspondance[3]
         parsing_useful_asm = true # start recording asm lines if we weren't currently
         # check if this entry is a special one marking the end of a text sequence
@@ -248,8 +301,8 @@ asmarray.each { |x|
             # get all the corresponding source code
             # we know the ending line, but need to calculate the starting line
             i = 0
-            printf("line num: %d\n", correspondance[1])
-            puts uri
+            #printf("line num: %d\n", correspondance[1])
+            #puts uri
             while (i < dwarf_lines[uri].length && dwarf_lines[uri][i] < correspondance[1])
                 i += 1
             end
@@ -265,8 +318,8 @@ asmarray.each { |x|
                 #if (correspondance[2]) THIS WAS REMOVED FROM REQUIREMENTS
                 #    low = high
                 #end
-                printf("i: %d\n", i)
-                printf("low: %d, high: %d\n", low, high)
+                #printf("i: %d\n", i)
+                #printf("low: %d, high: %d\n", low, high)
                 sources[cur_file][low-1..high-1].each_with_index do |line, index|
                     html_source += '<div class="src-line' + (correspondance[2] ? ' grey' : '') + '"><div>' + (index+low).to_s + '.</div><div>' + htmlify_string(line) + '</div></div>'
                 end
@@ -297,16 +350,8 @@ asmarray.each { |x|
     end
 }
 
-# close off current row
-html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
-
-# write to file
-header = File.open("header.txt").read
-footer = '</body></html>'
-
-Dir.mkdir("HTML") unless File.exists?("HTML")
-File.write("HTML/index.html", header + '<table class="dump">' + html_table + '</table>' + footer)
-
+# close off table and write to file
+write_html_file(target, html_table, html_asm, html_source)
 
 
 
