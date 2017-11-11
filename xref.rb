@@ -215,6 +215,7 @@ def htmlify_string(s)
     else
         return s.gsub('\n', '') #remove trailing newlines
         .gsub(' ', '&nbsp;') # convert spaces
+        .gsub('&', '&amp;') # convert ampersands
         .gsub('<', '&lt;').gsub('>', '&gt;') # convert less than and greater than
 
     end
