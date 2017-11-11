@@ -216,6 +216,9 @@ end
 $header = File.open("header.txt").read
 $footer = '</body></html>'
 
+# store filepath info for building index.html for multifile mode
+$filepaths = []
+
 def write_html_file(filepath, html_table, html_asm, html_source)
     # close off current row
     html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
@@ -242,6 +245,7 @@ def write_html_file(filepath, html_table, html_asm, html_source)
     end
     # write file
     File.write(tmp_path + "/" + name, $header + pretable + '<table class="dump">' + html_table + '</table>' + $footer)
+    $filepaths.push([tmp_path[5..-1] + "/" + name, name]) # add path info for building index.html later
 end
 
 
@@ -262,6 +266,7 @@ parsing_useful_asm = true
 found_et = false
 
 puts filehash
+
 
 
 # iterate over objdump assembly to build the webpage
@@ -364,7 +369,18 @@ asmarray.each { |x|
 write_html_file(target, html_table, html_asm, html_source)
 
 
-
+# create index file if needed
+if ($multifile)
+    content = '<html><body><ul>'
+    $filepaths.each { |x| 
+        content += '<li><a href="' + x[0] + '">' + x[1][0..-6] + '</a></li>'
+    }
+    content += '</ul></body></html>'
+    File.write("HTML/index.html", content)
+    
+    
+    
+end
 
 
 
