@@ -3,6 +3,12 @@ if (ARGV.length == 0)
    abort("you must provide a path to an executable as an argument!") 
 end
 path = ARGV[0]
+$multifile = false
+if (ARGV.length >= 2)
+    if (ARGV[1] == "multi")
+        $multifile = true
+    end
+end
 
 puts "executable: " + path + "\n\n"
 # need a more precise regex that only captures main instructions, this is all just for figuring things out
@@ -211,27 +217,31 @@ $header = File.open("header.txt").read
 $footer = '</body></html>'
 
 def write_html_file(filepath, html_table, html_asm, html_source)
-    puts "path: " + filepath
-    puts "asm: " + html_asm
     # close off current row
     html_table += '<tr><td>' + html_source + '</td><td>' + html_asm + '</td></tr>'
     html_asm = ''
     html_source = ''
     # save to directory, make sure folders exist
     tmp_path = "HTML"
+    name = "index.html"
+    pretable = "";
     Dir.mkdir("HTML") unless File.exists?("HTML")
-    puts filepath.split("/")[1..-2].join(" ")
-    filepath.split("/")[1..-2].each{ |folder|
-        puts folder
-        tmp_path = tmp_path + "/" + folder
-        Dir.mkdir(tmp_path) unless File.exists?(tmp_path)
-    }
-    # get filename from last entry
-    f = filepath.split("/")[-1].split("\.")
-    name = f[0] + "_" + f[1] + ".html"
+    
+    # get correct path if saving to multiple files
+    if ($multifile)
+        puts filepath.split("/")[1..-2].join(" ")
+        filepath.split("/")[1..-2].each{ |folder|
+            puts folder
+            tmp_path = tmp_path + "/" + folder
+            Dir.mkdir(tmp_path) unless File.exists?(tmp_path)
+        }
+        # get filename from last entry
+        f = filepath.split("/")[-1].split("\.")
+        name = f[0] + "_" + f[1] + ".html"
+        pretable = '<h1>' + f[0] + "." + f[1] + '</h1>'
+    end
     # write file
-    puts 
-    File.write(tmp_path + "/" + name, $header + '<h1>' + f[0] + "." + f[1] + '</h1>' + '<table class="dump">' + html_table + '</table>' + $footer)
+    File.write(tmp_path + "/" + name, $header + pretable + '<table class="dump">' + html_table + '</table>' + $footer)
 end
 
 
@@ -262,7 +272,7 @@ asmarray.each { |x|
     
     # look up file being written to
     if (filehash[x[0].to_i(16)] != nil)
-        if (target != nil)
+        if (target != nil && $multifile)
             # write current output to file
             puts "NEW FILE"
             write_html_file(target, html_table, html_asm, html_source)
